@@ -2,10 +2,24 @@
 <script>
   onmessage = (e) => {
     const m = e.data.pluginMessage;
-    if (m.type === "scan") {
-      document.getElementById("out").textContent = m.found
-        .map((f) => f.hex + "  " + f.name)
-        .join("\n");
-    }
+    if (m.type !== "scan") return;
+
+    const lines = m.found.map((f) => {
+      const v = f.verdict;
+      let note;
+      if (v.kind === "ok") note = "ok — " + v.token;
+      else if (v.kind === "drift")
+        note =
+          "DRIFT — meant " +
+          v.token +
+          " (" +
+          v.expected +
+          "), ΔE " +
+          v.distance.toFixed(2);
+      else note = "unknown color";
+      return f.hex + "  " + f.name.padEnd(14) + note;
+    });
+
+    document.getElementById("out").textContent = lines.join("\n");
   };
 </script>

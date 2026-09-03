@@ -67,21 +67,47 @@ async function scan() {
     (n) => "fills" in n && Array.isArray((n as GeometryMixin).fills)
   );
 
-  const found: { id: string; name: string; hex: string }[] = [];
+  const found: { id: string; name: string; hex: string; verdict: Verdict }[] =
+    [];
   for (const n of nodes) {
     const fills = (n as GeometryMixin).fills as Paint[];
     for (const f of fills) {
       if (f.type === "SOLID" && f.visible !== false) {
-        found.push({ id: n.id, name: n.name, hex: toHex(f.color) });
+        const hex = toHex(f.color);
+        found.push({ id: n.id, name: n.name, hex, verdict: classify(hex) });
       }
     }
   }
   figma.ui.postMessage({ type: "scan", found });
 }
 
-console.log("exact  ", hexDistance("#0D6EFD", "#0D6EFD"));
-console.log("1 digit", hexDistance("#0D6EFE", "#0D6EFD"));
-console.log("close  ", hexDistance("#0A66E0", "#0D6EFD"));
-console.log("wild   ", hexDistance("#FF00FF", "#0D6EFD"));
+const TOKENS: Record<string, string> = {
+  primary: "#0D6EFD",
+  success: "#198754",
+  danger: "#DC3545",
+  "neutral-900": "#212529",
+};
 
+type Verdict =
+  | { kind: "ok"; token: string }
+  | { kind: "drift"; token: string; expected: string; distance: number }
+  | { kind: "unknown" };
+
+function classify(hex: string): Verdict {
+  let best: { name: string; d: number } | null = null;
+  for (const [name, value] of Object.entries(TOKENS)) {
+    const d = hexDistance(hex, value);
+    if (!best || d < best.d) best = { name, d };
+  }
+  if (!best) return { kind: "unknown" };
+  if (best.d === 0) return { kind: "ok", token: best.name };
+  if (best.d < 3)
+    return {
+      kind: "drift",
+      token: best.name,
+      expected: TOKENS[best.name],
+      distance: best.d,
+    };
+  return { kind: "unknown" };
+}
 scan();
