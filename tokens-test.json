@@ -1,0 +1,8 @@
+{
+  "color": {
+    "primary": "#198754",
+    "success": "#0D6EFD",
+    "danger": "#DC3545",
+    "neutral-900": "#212529"
+  }
+}

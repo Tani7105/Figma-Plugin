@@ -50,7 +50,7 @@ function hexDistance(h1: string, h2: string): number {
 
 // ---- tokens ----
 
-const TOKENS: Record<string, string> = {
+let TOKENS: Record<string, string> = {
   primary: "#0D6EFD",
   success: "#198754",
   danger: "#DC3545",
@@ -58,6 +58,19 @@ const TOKENS: Record<string, string> = {
 };
 
 const DRIFT_THRESHOLD = 3;
+
+function flatten(obj: any, prefix = ""): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    const key = prefix ? `${prefix}.${k}` : k;
+    if (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v)) {
+      out[key] = v.toUpperCase();
+    } else if (v && typeof v === "object") {
+      Object.assign(out, flatten(v, key));
+    }
+  }
+  return out;
+}
 
 type Verdict =
   | { kind: "ok"; token: string }
@@ -123,7 +136,11 @@ async function scan() {
       }
     }
   }
-  figma.ui.postMessage({ type: "scan", found });
+  figma.ui.postMessage({
+    type: "scan",
+    found,
+    tokenCount: Object.keys(TOKENS).length,
+  });
 }
 
 scan();
@@ -136,6 +153,7 @@ figma.ui.onmessage = async (msg) => {
       figma.viewport.scrollAndZoomIntoView([node as SceneNode]);
     }
   }
+
   if (msg.type === "fix") {
     const node = await figma.getNodeByIdAsync(msg.id);
     if (!node || !("fills" in node)) return;
@@ -147,5 +165,19 @@ figma.ui.onmessage = async (msg) => {
     fills[i] = { ...(fills[i] as SolidPaint), color: hexToFigmaRgb(msg.hex) };
     (node as GeometryMixin).fills = fills;
     scan();
+  }
+
+  if (msg.type === "tokens") {
+    try {
+      const parsed = flatten(JSON.parse(msg.raw));
+      if (Object.keys(parsed).length === 0) {
+        figma.notify("No hex color values found in that file");
+        return;
+      }
+      TOKENS = parsed;
+      scan();
+    } catch {
+      figma.notify("Could not parse that file as JSON");
+    }
   }
 };

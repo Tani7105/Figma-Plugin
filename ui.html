@@ -3,6 +3,16 @@
     margin: 0;
     font: 11px ui-monospace, monospace;
   }
+  #bar {
+    padding: 8px;
+    border-bottom: 1px solid #ddd;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #count {
+    color: #666;
+  }
   .row {
     padding: 6px 8px;
     cursor: pointer;
@@ -38,12 +48,32 @@
   }
 </style>
 
+<div id="bar">
+  <input type="file" id="file" accept=".json" style="font-size: 11px" />
+  <span id="count"></span>
+</div>
+
 <div id="out"></div>
 
 <script>
+  document.getElementById("file").onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      parent.postMessage(
+        { pluginMessage: { type: "tokens", raw: reader.result } },
+        "*"
+      );
+    };
+    reader.readAsText(file);
+  };
+
   onmessage = (e) => {
     const m = e.data.pluginMessage;
     if (m.type !== "scan") return;
+
+    document.getElementById("count").textContent = m.tokenCount + " tokens";
 
     const out = document.getElementById("out");
     out.innerHTML = "";
