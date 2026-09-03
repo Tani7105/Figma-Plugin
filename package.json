@@ -4,10 +4,10 @@
   "description": "Your Figma Plugin",
   "main": "code.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "esbuild code.ts --bundle --outfile=code.js --target=es2017",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "watch": "npm run build -- --watch"
+    "watch": "esbuild code.ts --bundle --outfile=code.js --target=es2017 --watch"
   },
   "author": "",
   "license": "",
