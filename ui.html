@@ -1,9 +1,11 @@
-<div id="out">loading…</div>
+<pre id="out" style="font: 11px monospace"></pre>
 <script>
   onmessage = (e) => {
-    const msg = e.data.pluginMessage;
-    if (msg.type === "count") {
-      document.getElementById("out").textContent = msg.n + " text nodes";
+    const m = e.data.pluginMessage;
+    if (m.type === "scan") {
+      document.getElementById("out").textContent = m.found
+        .map((f) => f.hex + "  " + f.name)
+        .join("\n");
     }
   };
 </script>
