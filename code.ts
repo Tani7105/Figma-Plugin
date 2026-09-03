@@ -48,9 +48,45 @@ function hexDistance(h1: string, h2: string): number {
   return deltaE(rgbToLab(hexToRgb(h1)), rgbToLab(hexToRgb(h2)));
 }
 
-// ---- scan ----
+// ---- tokens ----
 
-figma.showUI(__html__, { width: 380, height: 520 });
+const TOKENS: Record<string, string> = {
+  primary: "#0D6EFD",
+  success: "#198754",
+  danger: "#DC3545",
+  "neutral-900": "#212529",
+};
+
+const DRIFT_THRESHOLD = 3;
+
+type Verdict =
+  | { kind: "ok"; token: string }
+  | { kind: "drift"; token: string; expected: string; distance: number }
+  | { kind: "unknown" };
+
+function classify(hex: string): Verdict {
+  let best: { name: string; d: number } | null = null;
+  for (const [name, value] of Object.entries(TOKENS)) {
+    const d = hexDistance(hex, value);
+    if (!best || d < best.d) best = { name, d };
+  }
+  if (!best) return { kind: "unknown" };
+  if (best.d === 0) return { kind: "ok", token: best.name };
+  if (best.d < DRIFT_THRESHOLD)
+    return {
+      kind: "drift",
+      token: best.name,
+      expected: TOKENS[best.name],
+      distance: best.d,
+    };
+  return { kind: "unknown" };
+}
+
+// ---- helpers ----
+
+function clone<T>(val: T): T {
+  return JSON.parse(JSON.stringify(val));
+}
 
 function toHex(c: { r: number; g: number; b: number }): string {
   const h = (v: number) =>
@@ -60,6 +96,15 @@ function toHex(c: { r: number; g: number; b: number }): string {
       .toUpperCase();
   return `#${h(c.r)}${h(c.g)}${h(c.b)}`;
 }
+
+function hexToFigmaRgb(hex: string) {
+  const { r, g, b } = hexToRgb(hex);
+  return { r: r / 255, g: g / 255, b: b / 255 };
+}
+
+// ---- scan ----
+
+figma.showUI(__html__, { width: 420, height: 520 });
 
 async function scan() {
   await figma.loadAllPagesAsync();
@@ -81,33 +126,26 @@ async function scan() {
   figma.ui.postMessage({ type: "scan", found });
 }
 
-const TOKENS: Record<string, string> = {
-  primary: "#0D6EFD",
-  success: "#198754",
-  danger: "#DC3545",
-  "neutral-900": "#212529",
-};
-
-type Verdict =
-  | { kind: "ok"; token: string }
-  | { kind: "drift"; token: string; expected: string; distance: number }
-  | { kind: "unknown" };
-
-function classify(hex: string): Verdict {
-  let best: { name: string; d: number } | null = null;
-  for (const [name, value] of Object.entries(TOKENS)) {
-    const d = hexDistance(hex, value);
-    if (!best || d < best.d) best = { name, d };
-  }
-  if (!best) return { kind: "unknown" };
-  if (best.d === 0) return { kind: "ok", token: best.name };
-  if (best.d < 3)
-    return {
-      kind: "drift",
-      token: best.name,
-      expected: TOKENS[best.name],
-      distance: best.d,
-    };
-  return { kind: "unknown" };
-}
 scan();
+
+figma.ui.onmessage = async (msg) => {
+  if (msg.type === "select") {
+    const node = await figma.getNodeByIdAsync(msg.id);
+    if (node && node.type !== "DOCUMENT" && node.type !== "PAGE") {
+      figma.currentPage.selection = [node as SceneNode];
+      figma.viewport.scrollAndZoomIntoView([node as SceneNode]);
+    }
+  }
+  if (msg.type === "fix") {
+    const node = await figma.getNodeByIdAsync(msg.id);
+    if (!node || !("fills" in node)) return;
+
+    const fills = clone((node as GeometryMixin).fills) as Paint[];
+    const i = fills.findIndex((f) => f.type === "SOLID");
+    if (i === -1) return;
+
+    fills[i] = { ...(fills[i] as SolidPaint), color: hexToFigmaRgb(msg.hex) };
+    (node as GeometryMixin).fills = fills;
+    scan();
+  }
+};

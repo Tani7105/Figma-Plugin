@@ -1,25 +1,105 @@
-<pre id="out" style="font: 11px monospace"></pre>
+<style>
+  body {
+    margin: 0;
+    font: 11px ui-monospace, monospace;
+  }
+  .row {
+    padding: 6px 8px;
+    cursor: pointer;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .row:hover {
+    background: #f5f5f5;
+  }
+  .swatch {
+    width: 10px;
+    height: 10px;
+    border: 1px solid #0002;
+    flex: none;
+  }
+  .name {
+    flex: 1;
+  }
+  .ok {
+    color: #198754;
+  }
+  .drift {
+    color: #b54708;
+  }
+  .unknown {
+    color: #666;
+  }
+  button {
+    font-size: 10px;
+    cursor: pointer;
+  }
+</style>
+
+<div id="out"></div>
+
 <script>
   onmessage = (e) => {
     const m = e.data.pluginMessage;
     if (m.type !== "scan") return;
 
-    const lines = m.found.map((f) => {
-      const v = f.verdict;
-      let note;
-      if (v.kind === "ok") note = "ok — " + v.token;
-      else if (v.kind === "drift")
-        note =
-          "DRIFT — meant " +
-          v.token +
-          " (" +
-          v.expected +
-          "), ΔE " +
-          v.distance.toFixed(2);
-      else note = "unknown color";
-      return f.hex + "  " + f.name.padEnd(14) + note;
-    });
+    const out = document.getElementById("out");
+    out.innerHTML = "";
 
-    document.getElementById("out").textContent = lines.join("\n");
+    m.found.forEach((f) => {
+      const v = f.verdict;
+      let note, cls;
+      if (v.kind === "ok") {
+        note = "ok — " + v.token;
+        cls = "ok";
+      } else if (v.kind === "drift") {
+        note = "drift → " + v.token + "  ΔE " + v.distance.toFixed(2);
+        cls = "drift";
+      } else {
+        note = "unknown";
+        cls = "unknown";
+      }
+
+      const row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML =
+        '<span class="swatch" style="background:' +
+        f.hex +
+        '"></span>' +
+        "<span>" +
+        f.hex +
+        "</span>" +
+        '<span class="name">' +
+        f.name +
+        "</span>" +
+        '<span class="' +
+        cls +
+        '">' +
+        note +
+        "</span>";
+
+      row.onclick = () =>
+        parent.postMessage(
+          { pluginMessage: { type: "select", id: f.id } },
+          "*"
+        );
+
+      if (v.kind === "drift") {
+        const btn = document.createElement("button");
+        btn.textContent = "fix";
+        btn.onclick = (ev) => {
+          ev.stopPropagation();
+          parent.postMessage(
+            { pluginMessage: { type: "fix", id: f.id, hex: v.expected } },
+            "*"
+          );
+        };
+        row.appendChild(btn);
+      }
+
+      out.appendChild(row);
+    });
   };
 </script>
