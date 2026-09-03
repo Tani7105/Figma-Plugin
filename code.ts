@@ -1,18 +1,70 @@
+// ---- color math (0–255 space) ----
+
+type RGB255 = { r: number; g: number; b: number };
+type Lab = { L: number; a: number; b: number };
+
+function hexToRgb(hex: string): RGB255 {
+  const h = hex.replace("#", "");
+  return {
+    r: parseInt(h.slice(0, 2), 16),
+    g: parseInt(h.slice(2, 4), 16),
+    b: parseInt(h.slice(4, 6), 16),
+  };
+}
+
+function linearize(c: number): number {
+  const s = c / 255;
+  return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+}
+
+function rgbToXyz({ r, g, b }: RGB255) {
+  const R = linearize(r),
+    G = linearize(g),
+    B = linearize(b);
+  return {
+    x: R * 0.4124564 + G * 0.3575761 + B * 0.1804375,
+    y: R * 0.2126729 + G * 0.7151522 + B * 0.072175,
+    z: R * 0.0193339 + G * 0.119192 + B * 0.9503041,
+  };
+}
+
+const WHITE = { x: 0.95047, y: 1.0, z: 1.08883 };
+
+function rgbToLab(rgb: RGB255): Lab {
+  const { x, y, z } = rgbToXyz(rgb);
+  const f = (t: number) =>
+    t > 0.008856 ? Math.cbrt(t) : (903.3 * t + 16) / 116;
+  const fx = f(x / WHITE.x),
+    fy = f(y / WHITE.y),
+    fz = f(z / WHITE.z);
+  return { L: 116 * fy - 16, a: 500 * (fx - fy), b: 200 * (fy - fz) };
+}
+
+function deltaE(a: Lab, b: Lab): number {
+  return Math.sqrt((a.L - b.L) ** 2 + (a.a - b.a) ** 2 + (a.b - b.b) ** 2);
+}
+
+function hexDistance(h1: string, h2: string): number {
+  return deltaE(rgbToLab(hexToRgb(h1)), rgbToLab(hexToRgb(h2)));
+}
+
+// ---- scan ----
+
 figma.showUI(__html__, { width: 380, height: 520 });
 
-function toHex({ r, g, b }: RGB): string {
-  const h = (c: number) =>
-    Math.round(c * 255)
+function toHex(c: { r: number; g: number; b: number }): string {
+  const h = (v: number) =>
+    Math.round(v * 255)
       .toString(16)
       .padStart(2, "0")
       .toUpperCase();
-  return `#${h(r)}${h(g)}${h(b)}`;
+  return `#${h(c.r)}${h(c.g)}${h(c.b)}`;
 }
 
 async function scan() {
   await figma.loadAllPagesAsync();
   const nodes = figma.currentPage.findAll(
-    (n) => "fills" in n && Array.isArray(n.fills)
+    (n) => "fills" in n && Array.isArray((n as GeometryMixin).fills)
   );
 
   const found: { id: string; name: string; hex: string }[] = [];
@@ -26,5 +78,10 @@ async function scan() {
   }
   figma.ui.postMessage({ type: "scan", found });
 }
+
+console.log("exact  ", hexDistance("#0D6EFD", "#0D6EFD"));
+console.log("1 digit", hexDistance("#0D6EFE", "#0D6EFD"));
+console.log("close  ", hexDistance("#0A66E0", "#0D6EFD"));
+console.log("wild   ", hexDistance("#FF00FF", "#0D6EFD"));
 
 scan();
